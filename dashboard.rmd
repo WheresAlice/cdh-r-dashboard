@@ -1,0 +1,54 @@
+---
+title: "HDFS Storage Predictions"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(prophet)
+library(dplyr)
+
+
+disk_usage <- read.csv('cleanedDiskUsage.csv', skip=1)
+total_usage <- rowSums(disk_usage[,-1]) / 1024 / 1024 / 1024 / 1024
+dates <- as.POSIXct(disk_usage$Date / 1000, origin="1970-01-01", tz="GMT")
+plot(dates, total_usage)
+
+d <- data.frame(x=as.Date(dates), y=total_usage)
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Linear Regression
+
+```{r}
+library("ggplot2"); theme_set(theme_bw())
+ggplot(d,aes(x,y))+ geom_point() +
+  expand_limits(x=as.Date("2020-02-16"))+
+  geom_smooth(method="lm",formula=y~poly(x,2),
+              fullrange=TRUE,fill="blue")+
+  geom_smooth(method="gam",formula=y~s(x,k=3),colour="red",
+              fullrange=TRUE,fill="red")+
+  geom_hline(aes(yintercept=766-25), colour="#990000", linetype="dashed")+ # @todo paramaterise this upper limit
+  scale_y_continuous(name="HDFS Usage (TB)", limits=c(0, 750))
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Prophet Prediction
+
+```{r warning=FALSE}
+
+df <- data.frame(ds=dates, y=total_usage)
+m <- prophet(df, yearly.seasonality = TRUE)
+future <- make_future_dataframe(m, periods = 730)
+forecast <- predict(m, future)
+plot(m, forecast)
+```
+
+
